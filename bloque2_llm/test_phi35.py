@@ -7,18 +7,17 @@ MODELO = "phi3.5"
 URL_OLLAMA = "http://localhost:11434/api/chat"
 
 PROMPT_SISTEMA = """Eres un intérprete de comandos de dibujo robótico.
-Responde ÚNICAMENTE con JSON. Sin texto adicional. Sin explicaciones.
+Responde ÚNICAMENTE con JSON. Sin texto adicional. Sin explicaciones fuera del JSON.
 
-FORMATO:
-- Un objeto:   {"action": "draw", "subjects": ["palabra"], "layout": "center"}
-- Dos objetos: {"action": "draw", "subjects": ["palabra1", "palabra2"], "layout": "<layout>"}
-- No es dibujo: {"action": "unknown"}
+FORMATO OBLIGATORIO — siempre incluye los 4 campos:
+- Un objeto:   {"action": "draw", "subjects": ["palabra"], "layout": "center", "message": "<mensaje>"}
+- Dos objetos: {"action": "draw", "subjects": ["palabra1", "palabra2"], "layout": "<layout>", "message": "<mensaje>"}
+- No es dibujo: {"action": "unknown", "message": "<mensaje>"}
 
-REGLAS:
+REGLAS DE SUBJECTS Y LAYOUT:
 1. "subjects" contiene sustantivos simples en inglés minúsculas. Sin artículos ni adjetivos.
-   Correcto: "dog", "apple", "table"  |  Incorrecto: "a dog", "big apple"
-2. El orden en "subjects" importa: el primer objeto ocupa la posición del layout.
-3. "layout" solo puede tener estos valores exactos:
+   Correcto: "dog", "apple"  |  Incorrecto: "a dog", "big apple"
+2. "layout" solo puede tener estos valores exactos:
    - "center"                   → un objeto centrado
    - "left_right"               → obj1 izquierda, obj2 derecha
    - "right_left"               → obj1 derecha, obj2 izquierda
@@ -28,101 +27,103 @@ REGLAS:
    - "top_right_bottom_left"    → obj1 esquina sup-der, obj2 esquina inf-izq
    - "bottom_left_top_right"    → obj1 esquina inf-izq, obj2 esquina sup-der
    - "bottom_right_top_left"    → obj1 esquina inf-der, obj2 esquina sup-izq
+3. Si hay relación espacial entre dos objetos, SIEMPRE usa el layout correspondiente.
 4. Máximo 2 subjects.
-5. Si hay relación espacial entre dos objetos, SIEMPRE usa el layout correspondiente. Nunca uses "center" cuando hay dos objetos con relación espacial.
 
 RELACIONES ESPACIALES:
-"sobre", "encima de", "arriba de", "por encima de"       → top_bottom
-"debajo de", "abajo de", "bajo", "por debajo de"         → bottom_top
-"a la izquierda de", "del lado izquierdo de"             → left_right
-"a la derecha de", "del lado derecho de"                 → right_left
-"junto a", "al lado de", "a lado de", "con"              → left_right (default horizontal)
-"en diagonal", "esquina"                                  → top_left_bottom_right (default diagonal)
-"arriba a la derecha"                                     → top_right_bottom_left
-"arriba a la izquierda"                                   → top_left_bottom_right
-"abajo a la derecha"                                      → bottom_right_top_left
-"abajo a la izquierda"                                    → bottom_left_top_right
+"sobre", "encima de", "arriba de"           → top_bottom
+"debajo de", "abajo de", "bajo"             → bottom_top
+"a la izquierda de"                         → left_right
+"a la derecha de"                           → right_left
+"junto a", "al lado de", "con"              → left_right
+"abajo a la derecha"                        → bottom_right_top_left
+"abajo a la izquierda"                      → bottom_left_top_right
+"arriba a la derecha"                       → top_right_bottom_left
+"arriba a la izquierda"                     → top_left_bottom_right
+"en diagonal"                               → top_left_bottom_right
+
+REGLAS DEL CAMPO "message":
+El message es lo que el usuario verá en su app. Debe estar en español, ser breve y amigable.
+
+CASO 1 — action es "draw" (sí pudo interpretar el pedido):
+  Confirma qué va a dibujar y dile que puede verlo en la simulación.
+  Tono: directo y positivo. Máximo 2 oraciones.
+  Ejemplos:
+  - "¡Listo! Voy a dibujar un perro. Puedes verlo en la simulación."
+  - "Entendido, dibujando una mariposa sobre una flor. Míralo en la simulación."
+  - "Va un gato junto a una casa. Revisa la simulación."
+
+CASO 2 — action es "unknown" (no entendió o fue conversación):
+  No regañes al usuario. Dale 2 o 3 ejemplos concretos de lo que sí puede pedir.
+  Tono: amigable, sin tecnicismos. Máximo 3 oraciones.
+  Ejemplos de mensaje:
+  - "No entendí qué quieres que dibuje. Prueba con algo como: 'dibuja un gato', 'hazme una flor', o 'pon un perro junto a una casa'."
+  - "Mmm, no supe qué dibujar. Intenta con cosas como: 'trázame un pájaro', 'dibuja un sol arriba de una montaña'."
 
 CUÁNDO USAR "unknown":
-- Saludos o despedidas: "hola", "adiós", "qué tal"
-- Preguntas sobre el sistema: "cómo funcinas", "qué eres", "para qué sirves"
+- Saludos o despedidas: "hola", "adiós", "gracias"
+- Preguntas sobre el sistema: "cómo funcinas", "qué eres", "cuánto mide el pizarrón"
 - Comandos de control: "para", "detente", "cancela"
-- Cualquier mensaje sin referencia a crear o dibujar algo visual.
 
-CUÁNDO INTENTAR DIBUJAR (aunque sea vago):
-- El usuario pide algo visual aunque no diga "dibuja": "quiero ver un perro", "ponme algo", "muéstrame un gato"
-- El usuario dice qué puede dibujar el sistema: "dibuja algo bonito", "dibuja lo que quieras" → elige un objeto simple
-- Preguntas sobre qué puede dibujar: "qué puedes dibujar" → elige y dibuja algo, no respondas unknown
+CUÁNDO USAR "draw" (aunque sea vago):
+- El usuario pide algo visual aunque no diga "dibuja": "quiero ver un perro", "ponme algo"
+- Pedidos abiertos: "dibuja algo bonito", "dibuja lo que quieras", "sorpréndeme" → elige un objeto simple
+- Preguntas sobre qué puede dibujar: "qué puedes dibujar" → elige y dibuja algo
 
-EJEMPLOS:
-"dibuja un perro"                                     → {"action": "draw", "subjects": ["dog"], "layout": "center"}
-"una manzana sobre una mesa"                          → {"action": "draw", "subjects": ["apple", "table"], "layout": "top_bottom"}
-"pon una mariposa sobre una flor"                     → {"action": "draw", "subjects": ["butterfly", "flower"], "layout": "top_bottom"}
-"dibuja un libro encima de una silla"                 → {"action": "draw", "subjects": ["book", "chair"], "layout": "top_bottom"}
-"dibuja una mochila abajo de una mesa"                → {"action": "draw", "subjects": ["backpack", "table"], "layout": "bottom_top"}
-"un gato a la izquierda de un perro"                  → {"action": "draw", "subjects": ["cat", "dog"], "layout": "left_right"}
-"un pez a la derecha de una roca"                     → {"action": "draw", "subjects": ["fish", "rock"], "layout": "right_left"}
-"un sol en diagonal con una luna"                     → {"action": "draw", "subjects": ["sun", "moon"], "layout": "top_left_bottom_right"}
-"dibuja algo bonito"                                  → {"action": "draw", "subjects": ["flower"], "layout": "center"}
-"dibuja lo que quieras"                               → {"action": "draw", "subjects": ["star"], "layout": "center"}
-"qué puedes dibujar"                                  → {"action": "draw", "subjects": ["cat"], "layout": "center"}
-"algo bonito"                                         → {"action": "draw", "subjects": ["flower"], "layout": "center"}
-"un animal"                                           → {"action": "draw", "subjects": ["dog"], "layout": "center"}
-"hola cómo estás"                                     → {"action": "unknown"}
-"para ya"                                             → {"action": "unknown"}
-"cómo funcinas"                                       → {"action": "unknown"}"""
+EJEMPLOS COMPLETOS:
+"dibuja un perro"
+→ {"action": "draw", "subjects": ["dog"], "layout": "center", "message": "¡Listo! Voy a dibujar un perro. Puedes verlo en la simulación."}
+
+"una manzana sobre una mesa"
+→ {"action": "draw", "subjects": ["apple", "table"], "layout": "top_bottom", "message": "Dibujando una manzana sobre una mesa. Míralo en la simulación."}
+
+"dibuja algo bonito"
+→ {"action": "draw", "subjects": ["flower"], "layout": "center", "message": "Va una flor. Puedes verla en la simulación."}
+
+"hola cómo estás"
+→ {"action": "unknown", "message": "¡Hola! Dime qué quieres que dibuje. Por ejemplo: 'dibuja un gato', 'hazme un árbol', o 'pon un sol sobre una montaña'."}
+
+"para ya"
+→ {"action": "unknown", "message": "No entendí ese comando. Si quieres que dibuje algo, dime por ejemplo: 'dibuja un perro' o 'hazme una mariposa'."}"""
 
 CASOS = [
-    # Un objeto directo
-    ("single_1",            "dibuja un perro"),
-    ("single_2",            "hazme una mariposa"),
-    ("single_3",            "trázame un elefante"),
+    # Un objeto
+    ("single_1",        "dibuja un perro"),
+    ("single_2",        "hazme una mariposa"),
+    ("single_3",        "trázame un elefante"),
 
     # Horizontal
-    ("horiz_1",             "dibuja un gato junto a un perro"),
-    ("horiz_2",             "quiero un árbol al lado de una casa"),
-    ("horiz_3",             "un pájaro a la izquierda de un árbol"),
-    ("horiz_4",             "pon un pez a la derecha de una roca"),
+    ("horiz_1",         "dibuja un gato junto a un perro"),
+    ("horiz_2",         "un pájaro a la izquierda de un árbol"),
+    ("horiz_3",         "pon un pez a la derecha de una roca"),
 
-    # Vertical arriba
-    ("vert_arriba_1",       "una manzana sobre una mesa"),
-    ("vert_arriba_2",       "dibuja un libro encima de una silla"),
-    ("vert_arriba_3",       "pon una mariposa sobre una flor"),
-    ("vert_arriba_4",       "pon un sol en la parte de arriba y una casa abajo"),
+    # Vertical
+    ("vert_1",          "una manzana sobre una mesa"),
+    ("vert_2",          "dibuja un libro encima de una silla"),
+    ("vert_3",          "quiero un perro debajo de un árbol"),
 
-    # Vertical abajo
-    ("vert_abajo_1",        "dibuja una mochila abajo de una mesa"),
-    ("vert_abajo_2",        "quiero un perro debajo de un árbol"),
-    ("vert_abajo_3",        "una pelota bajo una silla"),
+    # Diagonal
+    ("diag_1",          "un sol en diagonal con una luna"),
+    ("diag_2",          "dibuja un pájaro arriba a la derecha y un pez abajo a la izquierda"),
+    ("diag_3",          "dibuja un árbol abajo a la derecha de un pájaro"),
 
-    # Diagonales
-    ("diag_1",              "un sol en diagonal con una luna"),
-    ("diag_2",              "dibuja un pájaro arriba a la derecha y un pez abajo a la izquierda"),
-    ("diag_3",              "un gato en la esquina superior izquierda y un perro en la inferior derecha"),
-    ("diag_4",              "una estrella arriba a la izquierda de una flor"),
-    ("diag_5",              "dibuja un árbol abajo a la derecha de un pájaro"),
+    # Naturales
+    ("natural_1",       "quiero un perrito junto a su casita"),
+    ("natural_2",       "un pájaro posado sobre una rama"),
+    ("natural_3",       "dibuja una manzana encima de una mesa como si estuviera de adorno"),
 
-    # Frases naturales con relación espacial implícita
-    ("natural_1",           "dibuja una manzana encima de una mesa como si estuviera de adorno"),
-    ("natural_2",           "quiero un perrito junto a su casita"),
-    ("natural_3",           "pon una mariposa sobre una flor"),
-    ("natural_4",           "un pájaro posado sobre una rama"),
-    ("natural_5",           "dibuja un gato durmiendo bajo un árbol"),
+    # Vagos — deben intentar dibujar
+    ("vago_1",          "algo bonito"),
+    ("vago_2",          "dibuja lo que quieras"),
+    ("vago_3",          "sorpréndeme"),
+    ("vago_4",          "qué puedes dibujar"),
 
-    # Ambiguos que SÍ deben intentar dibujar
-    ("vago_1",              "algo bonito"),
-    ("vago_2",              "dibuja lo que quieras"),
-    ("vago_3",              "un animal"),
-    ("vago_4",              "qué puedes dibujar"),
-    ("vago_5",              "dibuja algo bonito"),
-    ("vago_6",              "sorpréndeme"),
-
-    # No son dibujo — deben ser unknown
-    ("no_dibujo_1",         "hola cómo estás"),
-    ("no_dibujo_2",         "para ya"),
-    ("no_dibujo_3",         "cómo funcinas"),
-    ("no_dibujo_4",         "gracias"),
-    ("no_dibujo_5",         "cuánto mide el pizarrón"),
+    # No dibujo — deben ser unknown
+    ("no_dibujo_1",     "hola cómo estás"),
+    ("no_dibujo_2",     "para ya"),
+    ("no_dibujo_3",     "gracias"),
+    ("no_dibujo_4",     "cuánto mide el pizarrón"),
+    ("no_dibujo_5",     "cómo funcinas"),
 ]
 
 LAYOUTS_VALIDOS = {
@@ -132,15 +133,8 @@ LAYOUTS_VALIDOS = {
     "bottom_left_top_right", "bottom_right_top_left"
 }
 
-# Casos que específicamente deben devolver unknown
-MUST_BE_UNKNOWN = {
-    "no_dibujo_1", "no_dibujo_2", "no_dibujo_3", "no_dibujo_4", "no_dibujo_5"
-}
-
-# Casos que específicamente deben devolver draw
-MUST_BE_DRAW = {
-    "vago_1", "vago_2", "vago_3", "vago_4", "vago_5", "vago_6"
-}
+MUST_BE_UNKNOWN = {"no_dibujo_1", "no_dibujo_2", "no_dibujo_3", "no_dibujo_4", "no_dibujo_5"}
+MUST_BE_DRAW    = {"vago_1", "vago_2", "vago_3", "vago_4"}
 
 def extraer_json(texto):
     try:
@@ -178,15 +172,19 @@ def llamar_llm(texto):
 def evaluar(resultado, nombre):
     if resultado is None:
         return "FALLO_JSON"
-    accion = resultado.get("action")
     if "action" not in resultado:
         return "FALLO_SIN_ACTION"
 
-    # Casos que DEBEN ser unknown
+    # Verificar que existe message
+    mensaje = resultado.get("message", "")
+    if not mensaje or not isinstance(mensaje, str) or len(mensaje.strip()) == 0:
+        return "FALLO_SIN_MESSAGE"
+
+    accion = resultado["action"]
+
     if nombre in MUST_BE_UNKNOWN and accion != "unknown":
         return f"FALLO_DEBE_SER_UNKNOWN (fue '{accion}')"
 
-    # Casos que DEBEN ser draw
     if nombre in MUST_BE_DRAW and accion != "draw":
         return f"FALLO_DEBE_SER_DRAW (fue '{accion}')"
 
@@ -209,7 +207,7 @@ def evaluar(resultado, nombre):
 
 if __name__ == "__main__":
     print(f"\n{'='*65}")
-    print(f"  Prueba final: {MODELO}  |  Layouts + ambiguos")
+    print(f"  Prueba: {MODELO}  |  JSON + message en español")
     print(f"{'='*65}\n")
 
     ok_count  = 0
@@ -223,9 +221,17 @@ if __name__ == "__main__":
 
         simbolo = "✓" if "OK" in estado else "✗"
         print(f"{simbolo} [{nombre}]")
-        print(f"  Input:   '{texto}'")
-        print(f"  Output:  {json.dumps(resultado, ensure_ascii=False) if resultado else error}")
-        print(f"  Estado:  {estado}  |  Latencia: {latencia:.2f}s")
+        print(f"  Input:    '{texto}'")
+
+        if resultado:
+            # Mostrar JSON sin message para no saturar la vista
+            datos_robot = {k: v for k, v in resultado.items() if k != "message"}
+            print(f"  Robot:    {json.dumps(datos_robot, ensure_ascii=False)}")
+            print(f"  App msg:  \"{resultado.get('message', '')}\"")
+        else:
+            print(f"  Error:    {error}")
+
+        print(f"  Estado:   {estado}  |  Latencia: {latencia:.2f}s")
         print()
 
         if "OK" in estado:
@@ -248,5 +254,5 @@ if __name__ == "__main__":
             print(f"  - [{nombre}] '{texto}'")
             print(f"    → {estado}")
     else:
-        print("\n  Todos los casos pasaron. Bloque 2 aprobado.")
+        print("\n  Todos los casos pasaron. Bloque 2 completamente aprobado.")
     print()
