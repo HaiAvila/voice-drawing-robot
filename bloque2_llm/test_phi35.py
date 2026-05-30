@@ -75,7 +75,7 @@ EJEMPLOS COMPLETOS:
 → {"action":"draw","subjects":["butterfly"],"layout":"center","message":"¡Va una mariposa! Mírala en la simulación."}
 
 "hola cómo estás"
-→ {"action":"unknown","message":"Dime qué quieres dibujar. Por ejemplo: 'dibuja un gato' o 'pon un sol sobre una montaña'."}
+→ {"action":"unknown","message":"Pídeme que dibuje algo. Ejemplo: 'dibuja un gato'."}
 
 "gracias"
 → {"action":"unknown","message":"Pídeme que dibuje algo. Por ejemplo: 'hazme una flor' o 'dibuja un pájaro'."}"""
@@ -131,16 +131,38 @@ MUST_BE_UNKNOWN = {"no_dibujo_1", "no_dibujo_2", "no_dibujo_3", "no_dibujo_4", "
 MUST_BE_DRAW    = {"vago_1", "vago_2", "vago_3", "vago_4"}
 
 def extraer_json(texto):
+    # Intento 1: parseo directo
     try:
         return json.loads(texto)
     except json.JSONDecodeError:
-        match = re.search(r'\{.*?\}', texto, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                return None
-        return None
+        pass
+
+    # Intento 2: extraer el primer bloque {} con regex
+    match = re.search(r'\{.*?\}', texto, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # Intento 3: el JSON está incompleto, intentar cerrarlo
+    # Busca desde el primer { hasta el final del texto
+    match = re.search(r'\{.*', texto, re.DOTALL)
+    if match:
+        fragmento = match.group()
+        # Contar llaves para ver cuántas faltan cerrar
+        abiertas = fragmento.count('{') - fragmento.count('}')
+        # Cerrar strings sin cerrar
+        if fragmento.count('"') % 2 != 0:
+            fragmento += '"'
+        # Cerrar llaves faltantes
+        fragmento += '}' * abiertas
+        try:
+            return json.loads(fragmento)
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 def llamar_llm(texto):
     inicio = time.time()
