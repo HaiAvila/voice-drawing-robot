@@ -120,6 +120,7 @@ CASOS = [
     ("no_dibujo_5",     "cómo funcinas"),
 ]
 
+
 LAYOUTS_VALIDOS = {
     "center", "left_right", "right_left",
     "top_bottom", "bottom_top",
