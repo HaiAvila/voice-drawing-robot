@@ -4,8 +4,6 @@ Speak inside a Meta Quest 3, and a real UR3 robot arm draws what you said.
 
 ![Robot drawing preview](docs/demo.gif)
 
-DEMO_VIDEO_HERE
-
 ## How it works
 
 1. **Voice.** In the headset, the user records a request on the voice panel. The app sends it as a WAV file to a PC server.
