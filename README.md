@@ -52,10 +52,9 @@ Built with Unity and the Meta XR SDK (Interaction SDK, passthrough). Main menu, 
 - **Robot:** Universal Robots UR3 (CB3), HTTP bridge to a Flask server
 
 ## My role
+I designed and built the full VR experience (UI/UX and the Meta Quest 3 adaptation in Unity), built along with the team the AI pipeline end to end (choosing and chaining Whisper, Llama, Gemma and OpenAI models, and handling their voice, text and image inputs and outputs), and connected it all to the robot side, so the real UR3 reproduced what the Unity digital twin planned.
 
-_TODO: describe what you built._
-
-**Team:** _TODO: names, or delete this line._
+**Team:** : Diego Márquez, Antonio Reyes y Haili Ávila
 
 ## Repository layout
 
